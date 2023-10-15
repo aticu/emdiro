@@ -45,4 +45,15 @@ impl KeyCodes {
     pub(crate) fn get_num(&self, index: usize) -> Option<u32> {
         self.codes.get(self.names_list.get(index)?).copied()
     }
+
+    /// Lookup the name of a keycode.
+    pub(crate) fn reverse_lookup(&self, keycode: u32) -> Option<&str> {
+        for (name, &code) in &self.codes {
+            if code == keycode {
+                return Some(name);
+            }
+        }
+
+        None
+    }
 }

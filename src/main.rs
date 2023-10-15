@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{fmt, path::PathBuf};
 
 use structopt::StructOpt;
 
@@ -24,6 +24,13 @@ pub(crate) struct Position {
     pub(crate) x: u32,
     /// The y position.
     pub(crate) y: u32,
+}
+
+impl fmt::Display for Position {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Position { x, y } = self;
+        write!(f, "{{ x: {x}, y: {y} }}")
+    }
 }
 
 /// A rectangle with integer coordinates.
@@ -57,6 +64,18 @@ impl Rect {
     }
 }
 
+impl fmt::Display for Rect {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Rect {
+            x,
+            y,
+            width,
+            height,
+        } = self;
+        write!(f, "{{ x: {x}, y: {y}, w: {width}, h: {height} }}")
+    }
+}
+
 /// Starts the `ydotoold` process.
 fn start_ydotoold() -> KillOnDrop {
     KillOnDrop(
@@ -74,6 +93,13 @@ fn start_ydotoold() -> KillOnDrop {
 /// lEt Me Do It foR yOu: simple automation on linux
 #[derive(Debug, StructOpt)]
 enum Config {
+    /// prints an existing command file to a pdf
+    Print {
+        /// the file where the command chain is stored
+        commandfile: PathBuf,
+        /// the file where the printed pdf should be stored
+        output: PathBuf,
+    },
     /// record a chain of commands that can later be replayed
     Record {
         /// the file where the command chain should be stored
@@ -93,6 +119,15 @@ fn main() -> anyhow::Result<()> {
     let config = Config::from_args();
 
     match config {
+        Config::Print {
+            commandfile,
+            output,
+        } => {
+            let chain: command::CommandChain =
+                serde_json::from_reader(std::fs::File::open(commandfile)?)?;
+
+            chain.to_pdf(output)?;
+        }
         Config::Record { commandfile } => {
             let chain = command::CommandChain::record()?;
             serde_json::to_writer_pretty(std::fs::File::create(commandfile)?, &chain)?;

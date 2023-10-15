@@ -1,6 +1,6 @@
 //! Handles construction and execution of scriptable commands.
 
-use std::time::Duration;
+use std::{path::Path, time::Duration};
 
 use image::RgbImage;
 
@@ -264,6 +264,78 @@ impl CommandChain {
         for command in &self.commands {
             command.execute()?;
         }
+
+        Ok(())
+    }
+
+    /// Converts the command chain to a PDF file.
+    pub(crate) fn to_pdf(&self, out_name: impl AsRef<Path>) -> anyhow::Result<()> {
+        let key_codes = crate::key_codes::KeyCodes::new()?;
+
+        let tempdir = tempfile::tempdir()?;
+        let img_path = tempdir.path();
+
+        let mut content = String::new();
+
+        let mut img_idx = 0;
+
+        for command in &self.commands {
+            match command {
+                Command::WaitForImage {
+                    location,
+                    image,
+                    click,
+                } => {
+                    let mut path = img_path.to_path_buf();
+                    path.push(format!("{img_idx}.png"));
+                    image.save(&path)?;
+
+                    content.push_str(&format!(
+                        "== wait for{} image at {location}\n#image(\"{img_idx}.png\")\n\n",
+                        if *click { " and click on" } else { "" },
+                    ));
+
+                    img_idx += 1;
+                }
+                Command::Sleep { duration } => {
+                    content.push_str(&format!("== sleep for {duration:?}\n\n"));
+                }
+                Command::Shell { command } => {
+                    content.push_str(&format!(
+                        "== run shell command\n```bash\n{command}\n```\n\n"
+                    ));
+                }
+                Command::PressKeys { keys } => {
+                    content.push_str(&format!(
+                        "== pressing keys\n{}\n\n",
+                        keys.iter()
+                            .map(|key| key_codes.reverse_lookup(*key).unwrap_or("<unknown key>"))
+                            .collect::<Vec<_>>()
+                            .join("\n")
+                    ));
+                }
+                Command::Type { text } => {
+                    content.push_str(&format!("== type text\n```text\n{text}\n```\n\n"));
+                }
+                Command::Click { position } => {
+                    content.push_str(&format!("== click at {position}\n\n"));
+                }
+                Command::MouseMove { position } => {
+                    content.push_str(&format!("== move mouse to {position}\n\n"));
+                }
+            }
+        }
+
+        let mut path = img_path.to_path_buf();
+        path.push("joined.typ");
+
+        std::fs::write(&path, content)?;
+
+        std::process::Command::new("typst")
+            .arg("compile")
+            .arg(path)
+            .arg(out_name.as_ref())
+            .output()?;
 
         Ok(())
     }
